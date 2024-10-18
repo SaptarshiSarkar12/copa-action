@@ -9,8 +9,7 @@ timeout=$4
 connection_format=$5
 format=$6
 output_file=$7
-retry_on_timeout=$8
-max_retries=$9
+max_retries=$8
 
 # parse image into image name
 image_no_tag=$(echo "$image" | cut -d':' -f1)
@@ -42,32 +41,34 @@ case "$connection_format" in
 esac
 
 # run copa to patch image
-OUTPUT_MESSAGE=$(copa patch -i "$image" -r ./data/"$report" -t "$patched_tag" $connection --timeout $timeout $output)
-if [ $? -eq 0 ]
+if [ "$max_retries" -eq 0 ]
 then
-    patched_image="$image_no_tag:$patched_tag"
-    echo "patched-image=$patched_image" >> "$GITHUB_OUTPUT"
-elif echo "$OUTPUT_MESSAGE" | grep -q "exceeded timeout"
-then
-    if [ "$retry_on_timeout" = "false" ]
+    if copa patch -i "$image" -r ./data/"$report" -t "$patched_tag" "$connection" --timeout "$timeout" "$output"
     then
+        patched_image="$image_no_tag:$patched_tag"
+        echo "patched-image=$patched_image" >> "$GITHUB_OUTPUT"
+    else
         echo "Error patching image $image with copa"
         exit 1
-    else
-        retries=0
-        while [ $retries -lt $max_retries ]
-        do
-            if copa patch -i "$image" -r ./data/"$report" -t "$patched_tag" $connection --timeout $timeout $output;
-            then
-                patched_image="$image_no_tag:$patched_tag"
-                echo "patched-image=$patched_image" >> "$GITHUB_OUTPUT"
-                break
-            else
-                retries=$((retries + 1))
-            fi
-        done
     fi
 else
-    echo "Error patching image $image with copa"
-    exit 1
+    retries=0
+    while [ "$retries" -lt "$max_retries" ]
+    do
+        if copa patch -i "$image" -r "./data/$report" -t "$patched_tag" "$connection" --timeout "$timeout" "$output"
+        then
+            patched_image="$image_no_tag:$patched_tag"
+            echo "patched-image=$patched_image" >> "$GITHUB_OUTPUT"
+            break
+        else
+            retries=$((retries+1))
+            if [ "$retries" -eq "$max_retries" ]
+            then
+                echo "Error patching image $image with copa"
+                exit 1
+            else
+                echo "WARNING: Attempt $retries failed. Retrying..."
+            fi
+        fi
+    done
 fi
