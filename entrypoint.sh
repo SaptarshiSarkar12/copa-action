@@ -9,7 +9,7 @@ timeout=$4
 connection_format=$5
 format=$6
 output_file=$7
-max_retries=$8
+max_retries=${8:-0}
 
 # parse image into image name
 image_no_tag=$(echo "$image" | cut -d':' -f1)
